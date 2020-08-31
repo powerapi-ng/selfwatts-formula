@@ -1,0 +1,2 @@
+powerapi [mongodb, influxdb, opentsdb] == 0.6.10
+scikit-learn
