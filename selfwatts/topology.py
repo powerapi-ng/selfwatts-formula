@@ -22,7 +22,7 @@ class CPUTopology:
     This class stores the necessary information about the CPU topology.
     """
 
-    def __init__(self, tdp: int, freq_bclk: int, ratio_min: int, ratio_base: int, ratio_max: int) -> None:
+    def __init__(self, tdp: int, freq_bclk: int, ratio_min: int, ratio_base: int, ratio_max: int, fixed_counters: int, general_counters: int) -> None:
         """
         Create a new CPU topology object.
         :param tdp: TDP of the CPU in Watt
@@ -30,12 +30,16 @@ class CPUTopology:
         :param ratio_min: Maximum efficiency ratio
         :param ratio_base: Base frequency ratio
         :param ratio_max: Maximum frequency ratio (with Turbo-Boost)
+        :param fixed_counters: Number of fixed counters available
+        :param general_counters: Number of general counters available
         """
         self.tdp = tdp
         self.freq_bclk = freq_bclk
         self.ratio_min = ratio_min
         self.ratio_base = ratio_base
         self.ratio_max = ratio_max
+        self.fixed_counters = fixed_counters
+        self.general_counters = general_counters
 
     def get_min_frequency(self) -> int:
         """

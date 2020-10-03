@@ -55,6 +55,8 @@ def generate_selfwatts_parser() -> ComponentSubParser:
     parser.add_argument('cpu-ratio-min', help='CPU minimal frequency ratio', type=int, default=10)
     parser.add_argument('cpu-ratio-base', help='CPU base frequency ratio', type=int, default=23)
     parser.add_argument('cpu-ratio-max', help='CPU maximal frequency ratio (with Turbo-Boost)', type=int, default=40)
+    parser.add_argument('cpu-num-fixed-counters', help='CPU number of available fixed counters', type=int, default=3)
+    parser.add_argument('cpu-num-general-counters', help='CPU number of available general counters', type=int, default=4)
 
     # Formula error threshold
     parser.add_argument('cpu-error-threshold', help='Error threshold for the CPU power models (in Watt)', type=float, default=2.0)
@@ -114,7 +116,6 @@ def run_selfwatts(args) -> None:
     """
     Run PowerAPI with the SelfWatts formula.
     :param args: CLI arguments namespace
-    :param logger: Logger to use for the actors
     """
     fconf = args['formula']['selfwatts']
 
@@ -127,7 +128,9 @@ def run_selfwatts(args) -> None:
     route_table = RouteTable()
     route_table.dispatch_rule(HWPCReport, HWPCDispatchRule(HWPCDepthLevel.SOCKET, primary=True))
 
-    cpu_topology = CPUTopology(fconf['cpu-tdp'], fconf['cpu-base-clock'], fconf['cpu-ratio-min'], fconf['cpu-ratio-base'], fconf['cpu-ratio-max'])
+    cpu_topology = CPUTopology(fconf['cpu-tdp'], fconf['cpu-base-clock'], fconf['cpu-ratio-min'],
+                               fconf['cpu-ratio-base'], fconf['cpu-ratio-max'],
+                               fconf['cpu-num-fixed-counters'], fconf['cpu-num-general-counters'])
 
     report_filter = Filter()
     pullers = PullerGenerator(report_filter).generate(args)
