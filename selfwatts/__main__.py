@@ -69,6 +69,9 @@ def generate_selfwatts_parser() -> ComponentSubParser:
     parser.add_argument('learn-min-samples-required', help='Minimum amount of samples required before trying to learn a power model', type=int, default=10)
     parser.add_argument('learn-history-window-size', help='Size of the history window used to keep samples to learn from', type=int, default=60)
 
+    # Controller parameters
+    parser.add_argument('controller-fixed-events', help='List of events name fixed in the controller', type=str, default='')
+
     return parser
 
 
@@ -84,7 +87,12 @@ def setup_cpu_formula_actor(fconf, route_table, report_filter, cpu_topology, pus
     """
     def cpu_formula_factory(name: str, _):
         scope = FormulaScope.CPU
-        config = SelfWattsFormulaConfig(scope, fconf['sensor-reports-frequency'], fconf['cpu-rapl-ref-event'], fconf['cpu-error-threshold'], cpu_topology, fconf['learn-min-samples-required'], fconf['learn-history-window-size'])
+        config = SelfWattsFormulaConfig(scope,
+                                        fconf['sensor-reports-frequency'],
+                                        fconf['cpu-rapl-ref-event'], fconf['cpu-error-threshold'],
+                                        cpu_topology,
+                                        fconf['learn-min-samples-required'], fconf['learn-history-window-size'],
+                                        fconf['controller-fixed-events'])
         return SelfWattsFormulaActor(name, pushers, config)
 
     cpu_dispatcher = DispatcherActor('cpu_dispatcher', cpu_formula_factory, route_table)
@@ -104,7 +112,12 @@ def setup_dram_formula_actor(fconf, route_table, report_filter, cpu_topology, pu
     """
     def dram_formula_factory(name: str, _):
         scope = FormulaScope.DRAM
-        config = SelfWattsFormulaConfig(scope, fconf['sensor-reports-frequency'], fconf['dram-rapl-ref-event'], fconf['dram-error-threshold'], cpu_topology, fconf['learn-min-samples-required'], fconf['learn-min-samples-required'])
+        config = SelfWattsFormulaConfig(scope,
+                                        fconf['sensor-reports-frequency'],
+                                        fconf['dram-rapl-ref-event'], fconf['dram-error-threshold'],
+                                        cpu_topology,
+                                        fconf['learn-min-samples-required'], fconf['learn-min-samples-required'],
+                                        fconf['controller-fixed-events'])
         return SelfWattsFormulaActor(name, pushers, config)
 
     dram_dispatcher = DispatcherActor('dram_dispatcher', dram_formula_factory, route_table)

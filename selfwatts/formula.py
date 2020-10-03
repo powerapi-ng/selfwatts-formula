@@ -17,19 +17,23 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import pickle
 import warnings
 from collections import OrderedDict, deque
 from typing import List, Dict
 
+from scipy import stats
 from scipy.linalg import LinAlgWarning
-from sklearn.linear_model import ElasticNet as Regression
+from scipy.stats import PearsonRConstantInputWarning
+from sklearn.linear_model import Lasso as Regression
 
 from selfwatts.topology import CPUTopology
 
 # make scikit-learn more silent
 warnings.filterwarnings('ignore', category=LinAlgWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=PearsonRConstantInputWarning)
 
 
 class PowerModelNotInitializedException(Exception):
@@ -59,6 +63,7 @@ class History:
         self.max_length = max_length
         self.X: deque[List[int]] = deque(maxlen=max_length)
         self.y: deque[float] = deque(maxlen=max_length)
+        self.sync = False
 
     def __len__(self) -> int:
         """
@@ -73,8 +78,32 @@ class History:
         :param events_value: List of raw events value
         :param power_reference: Power reference corresponding to the events value
         """
-        self.X.append(events_value)
-        self.y.append(power_reference)
+        if len(events_value) > 0:
+            self.X.append(events_value)
+            self.y.append(power_reference)
+
+    def generate_pearson_coef(self) -> List[float]:
+        """
+        Returns the pearson coefficient of the features.
+        :return: List of pearson coefficient of the features.
+        """
+        correlations = []
+
+        for feature, _ in enumerate(next(iter(self.X))):
+            samples = []
+            for sample in self.X:
+                samples.append(sample[feature])
+
+            correlations.append(stats.pearsonr(samples, self.y)[0])
+
+        return correlations
+
+    def flush(self) -> None:
+        """
+        Flush the samples from the history.
+        """
+        self.X.clear()
+        self.y.clear()
 
 
 class PowerModel:
@@ -94,6 +123,40 @@ class PowerModel:
         self.history: History = History(history_window_size)
         self.id = 0
 
+    def generate_unfitted_model(self) -> Regression:
+        """
+        Returns an unfitted model to use for the power estimations.
+        :return: Unfitted regression model
+        """
+        # fit_intercept = True if len(self.history) == self.history.max_length else False
+        return Regression()
+
+    def old_learn_power_model(self, min_samples: int, min_intercept: float, max_intercept: float) -> None:
+        """
+        Learn a new power model using the stored reports and update the formula id/hash.
+        :param min_samples: Minimum amount of samples required to learn the power model
+        :param min_intercept: Minimum value allowed for the intercept of the model
+        :param max_intercept: Maximum value allowed for the intercept of the model
+        """
+        if len(self.history) < min_samples:
+            return
+
+        try:
+            model = self.generate_unfitted_model()
+            model.fit(self.history.X, self.history.y)
+        except ValueError:
+            logging.error('failed to learn a new power model from history values')
+            self.history.flush()
+            return
+
+        # Discard the new model when the intercept is not in specified range
+        if not (min_intercept <= model.intercept_ < max_intercept):
+            return
+
+        self.model = model
+        self.hash = hashlib.blake2b(pickle.dumps(self.model), digest_size=20).hexdigest()
+        self.id += 1
+
     def learn_power_model(self, min_samples: int, min_intercept: float, max_intercept: float) -> None:
         """
         Learn a new power model using the stored reports and update the formula id/hash.
@@ -104,8 +167,13 @@ class PowerModel:
         if len(self.history) < min_samples:
             return
 
-        fit_intercept = True if len(self.history) == self.history.max_length else False
-        model: Regression = Regression(fit_intercept=fit_intercept, positive=True).fit(self.history.X, self.history.y)
+        try:
+            model = self.generate_unfitted_model()
+            model.fit(self.history.X, self.history.y)
+        except ValueError:
+            logging.error('failed to learn a new power model from history values')
+            self.history.flush()
+            return
 
         # Discard the new model when the intercept is not in specified range
         if not (min_intercept <= model.intercept_ < max_intercept):
@@ -178,6 +246,7 @@ class SelfWattsFormula:
         :param history_window_size: Size of the history window used to keep samples to learn from
         """
         self.cpu_topology = cpu_topology
+        self.history_window_size = history_window_size
         self.models = self._gen_models_dict(history_window_size)
 
     def _gen_models_dict(self, history_window_size: int) -> Dict[int, PowerModel]:
@@ -217,3 +286,10 @@ class SelfWattsFormula:
         :return: Power model to use for the current frequency
         """
         return self.models[self._get_frequency_layer(self.compute_pkg_frequency(system_core))]
+        # return next(iter(self.models.values()))
+
+    def flush_power_models(self) -> None:
+        """
+        Remove all learned models and their samples history.
+        """
+        self.models = self._gen_models_dict(self.history_window_size)
