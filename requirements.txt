@@ -1,2 +1,2 @@
-powerapi [mongodb, influxdb, opentsdb] == 0.6.10
+powerapi [mongodb, influxdb, opentsdb] == 0.7.3
 scikit-learn
